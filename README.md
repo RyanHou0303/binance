@@ -1,143 +1,201 @@
 # binance
 
-面向热门加密资产的量化研究项目，逐步构建从行情数据、策略研究、组合回测到实验评估的完整工作流，并通过 **Agent Harness** 组织和追踪研究任务。
+基于 Python 和 Binance 历史行情的加密资产量化研究项目。使用 Codex CLI 将研究假设（thesis）转换成结构化方案和策略代码，再通过独立的回测与评估模块研究结果。
 
-当前处于早期开发阶段：已有行情下载脚本、历史数据快照和回测框架草稿；Agent Harness 尚未实现。
+项目处于原型阶段。方案生成、代码生成、回测和评估目前分步运行，尚未接成自动研究循环。仓库中的策略和回测结果用于研究，不构成已经验证的交易系统。
 
-## 项目目标
+## 当前流程
 
-- **量化研究**：围绕主流加密资产开展收益、波动率、相关性、动量、均值回归和横截面因子研究。
-- **组合回测**：支持多资产配置、调仓规则、手续费和滑点，并逐步补齐绩效指标与基准比较。
-- **可复现实验**：记录数据版本、代码版本、参数、运行环境和结果，使每个研究结论都能追溯和复跑。
-- **Agent Harness**：建立统一的任务、工具和评估接口，让 Agent 在明确的执行边界内完成研究、运行实验和整理报告。
+```text
+thesis
+  → agent.py → plan.json
+  → coder.py → generated_signal.py
+  → 检查数据要求、代码和目标权重
+  → backtesting.py → evaluation.py
+```
 
-## 当前进展
-
-| 模块 | 状态 | 说明 |
-| --- | --- | --- |
-| 行情下载 | 已有实现 | 从 Binance 公共行情接口分页下载 K 线，支持重试、去重、UTC 时间处理，仅保存已收盘 K 线 |
-| 历史数据 | 已有快照 | 9 个 USDT 交易对，分别保存 `1h` 和 `1d` CSV，共 18 个文件 |
-| 数据加载 | 已有实现 | 按币种与时间范围读取、对齐开盘价和收盘价，异常价格设为 `NaN` 并发出警告 |
-| 组合回测 | 开发中 | 已有配置和部分调仓逻辑，权重接口、交易记账和结果输出仍需完善 |
-| Agent Harness | 规划中 | 任务调度、工具执行、实验追踪和评估系统尚未实现 |
-
-当前研究池：`BTCUSDT`、`ETHUSDT`、`BNBUSDT`、`SOLUSDT`、`XRPUSDT`、`DOGEUSDT`、`ADAUSDT`、`TRXUSDT`、`LINKUSDT`。后续可按流动性和数据可用性调整。
+| 模块 | 当前功能 |
+| --- | --- |
+| `download_binance.py` | 下载 Binance 公共历史 K 线，处理重试、分页、去重和 UTC 时间 |
+| `agent.py` | 调用 Codex CLI，将 thesis 转换成英文策略方案，按 JSON Schema 保存 |
+| `plan.schema.json` | 规定方案的四个字段：假设依据、因子公式、权重规则、验证方法 |
+| `coder.py` | 读取方案，调用另一次 Codex CLI，将最终代码输出保存为 `generated_signal.py` |
+| `signals.py` | 手写 Signal 接口和回测示例，目前每个币固定 10% 权重 |
+| `generated_signal.py` | 当前生成的月度拟合岭回归策略样例，使用收盘价构造特征 |
+| `backtesting.py` | 加载行情，按目标权重调仓，记录持仓、现金、成本和净值，绘制净值及回撤 |
+| `evaluation.py` | 收益、风险、换手率、成本、分期收益和可选基准比较 |
+| `tests/test_evaluation.py` | 手算指标、日线/小时线年化、跨年收益、换手率、基准及多空回测验证 |
 
 ## 目录结构
 
 ```text
 binance/
-├── README.md             # 项目说明与开发路线
-├── pyproject.toml        # Python 项目配置与依赖
-├── uv.lock               # 依赖锁定文件
-├── .python-version       # 本地 Python 版本
-├── main.py               # 预留入口，目前仅输出欢迎信息
-├── download_binance.py   # 历史 K 线下载脚本
-├── backtesting.py        # 数据加载与组合回测草稿
-└── data/
-    ├── BTCUSDT_1h.csv
-    ├── BTCUSDT_1d.csv
-    └── ...
+├── agent.py
+├── coder.py
+├── plan.schema.json
+├── plan.json                 # 当前生成的方案样例，每次生成会覆盖
+├── generated_signal.py       # 当前生成的代码样例，每次生成会覆盖
+├── signals.py
+├── backtesting.py
+├── evaluation.py
+├── download_binance.py
+├── main.py                   # 预留入口，尚未编排整个研究流程
+├── pyproject.toml
+├── uv.lock
+├── tests/
+└── data/                     # 已跟踪的公开行情快照，9 个币 × 2 种频率
 ```
 
-## 快速开始
+`outputs/` 用于保存图表，已加入 `.gitignore`。
 
-在项目目录执行。需要 Python 3.12+ 和 `uv`。
+## 安装
+
+需要 Python 3.12+ 和 [uv](https://docs.astral.sh/uv/)。在项目根目录执行：
 
 ```bash
 uv sync --locked
 ```
 
-依赖包括 `numpy`、`pandas` 和 `requests`，具体版本由 `uv.lock` 锁定。
+依赖包括 NumPy、pandas、Matplotlib、requests 和 OpenAI SDK。当前两个 Agent 脚本通过 subprocess 调用 Codex CLI，未使用 OpenAI SDK 发起 API 请求。
 
-### 下载行情
-
-先修改 `download_binance.py` 顶部的配置：
-
-| 配置 | 用途 | 当前设置 |
-| --- | --- | --- |
-| `SYMBOLS` | 下载的交易对 | 上述 9 个 USDT 交易对 |
-| `INTERVALS` | K 线频率 | `1h`、`1d` |
-| `START` | 开始时间 | `2020-01-01` |
-| `END` | 结束时间，不包含该时点 | `None`，下载至当前可用的已收盘 K 线 |
-| `OUTPUT_DIR` | CSV 输出目录 | `/Users/bohanhou/binance/data` |
+生成方案或代码还需要安装 [Codex CLI](https://learn.chatgpt.com/docs/cli)，并完成登录：
 
 ```bash
-uv run download_binance.py
+codex login
+codex login status
 ```
 
-脚本使用 `https://data-api.binance.vision` 的公共行情接口，不需要 API Key。相同交易对和频率的文件会被重新下载并覆盖。
+使用 ChatGPT 登录时，按账号可用的 Codex 订阅额度及限制使用；API key 登录单独按 API 计费。参见 [官方登录说明](https://learn.chatgpt.com/docs/auth)。运行数据加载、已有策略、回测和评估不需要模型服务。
 
-CSV 文件名格式为 `{SYMBOL}_{INTERVAL}.csv`，字段包括：
+## 分步使用
+
+### 1. 输入研究假设，生成方案
+
+```bash
+uv run agent.py
+```
+
+在 `Enter your thesis:` 后输入假设，例如：
 
 ```text
-open_time, open, high, low, close, volume, close_time,
-quote_volume, trade_count, taker_buy_base_volume, taker_buy_quote_volume
+Assets with strong returns over the past week may continue outperforming next week.
 ```
 
-时间统一为 UTC。现有快照中的日线最后开盘时间为 `2026-11-08 00:00 UTC`，小时线最后开盘时间为 `2026-11-09 21:00 UTC`；SOL 数据从 2020 年 8 月开始，其余币种从 2020 年 1 月开始。数据快照随本次初始提交保留，后续下载会改变文件内容。
+结果保存到 `plan.json`，包含 `hypothesis_and_rationale`、`factor_formula`、`portfolio_weighting_rules` 和 `validation_plan`。当前 Schema 中四个字段都是字符串。`agent.py` 使用相对路径，请从项目根目录运行。
 
-### 查看数据加载结果
+### 2. 根据方案生成策略代码
 
-在 `backtesting.py` 的 `config` 中设置研究池、时间范围、数据目录和频率后执行：
+```bash
+uv run coder.py
+```
+
+结果保存到 `generated_signal.py`。Agent 的命令执行环境使用 read-only sandbox；最终消息通过 CLI 的 `--output-last-message` 写入指定文件。参见 [Codex 命令说明](https://learn.chatgpt.com/docs/developer-commands#codex-exec)。
+
+当前 `coder.py` 还没有检查 CLI 返回状态、生成代码语法或权重行为。生成后应先检查文件，再接入回测；文件存在本身不代表本轮生成成功。
+
+### 3. 运行手写示例
+
+```bash
+uv run signals.py
+```
+
+当前示例使用 9 个币、小时线、每日调仓，每个币配置 10%，目标现金比例为 10%。脚本打印前几行权重、绩效指标、年度收益，并显示净值及回撤图。
+
+`backtesting.py` 也提供独立等权示例：
 
 ```bash
 uv run backtesting.py
 ```
 
-当前脚本只会加载并打印数据，不会自动运行完整回测。`run_backtest(config)` 在 `weights=None` 时返回数据且 `summary=None`；配置非空权重后的交易流程仍未完成，暂不能用于策略绩效评估。
+运行前检查研究池、时间范围、数据目录、K 线频率和预热长度。`backtesting.py` 的示例与下载脚本仍包含本机绝对路径，需要按自己的环境修改；`signals.py` 和生成示例从项目位置定位数据目录。
 
-`missing_data` 配置项目前尚未接入严格报错逻辑：实际加载行为是发出警告，并将缺失或无效价格保留为 `NaN`。
+### 4. 在 Python 中连接模块
 
-下载脚本和回测配置目前使用本机绝对路径。在其他机器使用时，需要分别修改 `OUTPUT_DIR` 和 `config["data_dir"]`。
+```python
+from backtesting import load_data, plot_backtest, run_backtest
+from evaluation import evaluate_backtest
+from signals import Signal
 
-## 量化研究路线
+# config 结构可参考 signals.py 的运行示例。
+data = load_data(config)
+config["weights"] = Signal().get_weight(data["close"])
+result = run_backtest(config, data=data)
+report = evaluate_backtest(result)
 
-1. **数据质量与研究池**：检查重复、缺口、上市时间和异常价格，定义各时间点可交易的资产集合。
-2. **基准策略**：建立买入持有、等权组合和定期再平衡基准，先验证交易记账与成本计算。
-3. **因子与策略**：研究时间序列动量、横截面动量、均值回归、波动率调整和成交量特征。
-4. **组合与风险**：探索仓位约束、波动率目标、资产相关性和调仓频率对结果的影响。
-5. **评估与复现**：输出收益、最大回撤、波动率、夏普比率、换手率和成本明细，并进行样本外与滚动验证。
-
-研究过程中需要明确特征可用时间和成交时间，避免使用未来数据；币种筛选与缺失数据处理也应成为实验配置的一部分。
-
-## Agent Harness 规划
-
-Harness 将负责把研究目标转成可执行、可检查、可恢复的实验流程。以下为目标设计，当前仓库尚无对应实现。
-
-```mermaid
-flowchart LR
-    A[研究目标与任务配置] --> B[Harness 调度]
-    B --> C[Agent 研究与工具调用]
-    C --> D[数据校验与回测执行]
-    D --> E[指标评估与结果检查]
-    E --> F[实验归档与研究报告]
-    E --> B
+print(report["summary"].to_string())
+print(report["yearly_returns"])
+plot_backtest(result, save_path="outputs/backtest.png")
 ```
 
-计划建设的核心能力：
+验证生成策略后，可将导入改为 `from generated_signal import Signal`。
 
-| 能力 | 计划内容 |
+## 权重与回测约定
+
+- `Signal.get_weight(close)` 返回与 close 同索引、同币种列的 DataFrame。
+- 每行对应当前 K 线开盘时执行的目标权重，只能使用之前已经结束的 K 线数据。
+- 正权重做多，负权重做空，每行绝对权重之和不超过 1，所有权重必须有限。
+- `load_data()` 返回开盘价、收盘价、时间步长、起止时间。预热数据可用于生成信号，交易从配置的 start 开始。
+- `missing_data="warn"` 将缺失或无效价格保留为 NaN 并警告；`"raise"` 则报错。缺开盘价时暂停该币交易，估值沿用最近已知价格。
+- 回测支持 1h / 1d K 线，以及首次建仓后不再调仓（rebalance=None）、按小时、日、周、月调仓。
+- 手续费和滑点按单边成交额计入，单位为 bps。做空按负持仓与现金记账，尚未模拟借币费用、资金费率、保证金、盘中强平或流动性约束；净资产非正时报错。
+
+## 当前生成样例的限制
+
+仓库内的 `plan.json` 与 `generated_signal.py` 是一次生成样例。该策略要求至少 20 个有效资产、253 根连续有效收盘价用于特征，以及至少 504 个已有标签的训练日期，并在月末拟合。
+
+当前数据只有 9 个币，因此该生成样例返回全零权重；其运行示例又配置了小时线，而方案按日线设计。它目前不能用于验证这份方案的策略表现。后续应将实际研究池、数据频率和历史长度同时传入 Agent，并在配置不匹配时明确报错。仓库保留此样例用于展示当前流程的边界。
+
+## 绩效评估
+
+`evaluate_backtest(result, risk_free_rate=0.0, benchmarks=None)` 返回：
+
+| 字段 | 内容 |
 | --- | --- |
-| 任务协议 | 定义研究问题、输入数据、约束、验收标准和输出格式 |
-| 执行循环 | 管理规划、工具调用、结果观察和后续步骤，记录任务状态 |
-| 工具接口 | 统一封装数据读取、特征计算、回测运行和指标评估 |
-| 执行边界 | 配置可用工具、文件访问范围、时间与调用预算、超时和重试 |
-| 实验追踪 | 保存任务 ID、代码提交、数据标识、参数、随机种子、日志和产物 |
-| 自动评估 | 校验数据、交易约束、绩效指标和基准对比，保留失败原因 |
-| 恢复与复跑 | 从已保存状态恢复中断任务，并支持按实验配置重新执行 |
+| summary | 总收益、年化复合收益、波动率、Sharpe、最大回撤、Calmar、盈利周期比例、最好/最差周期、成交数、换手率、手续费和滑点 |
+| returns / drawdown | 账户收益和回撤时间序列 |
+| turnover | 每根 K 线的双边换手率 |
+| monthly_returns / yearly_returns | 按自然月、自然年复合的收益，含部分期间 |
+| comparison | 策略与可选基准的收益和风险指标对照 |
 
-首个版本优先完成单个 Agent 的完整研究循环；后续再按需要扩展研究、实现和评估等角色。
+比率使用小数，例如 0.12 表示 12%。年化按 365 天计算，自动从规则间隔的净值序列识别频率。Sharpe 使用周期算术超额收益和样本标准差；零波动率或不足两个收益观察值时为 NaN，零回撤时 Calmar 为 NaN。盈利周期比例统计 K 线账户收益，不是平仓交易胜率。
 
-## 开发清单
+双边换手率包含首次建仓，分母为上一期末净资产，首根用初始资金。成本相对初始资金的比率只描述支出规模，不代表有无成本回测的收益差。分期收益按 K 线结束前的 UTC 日期归属，例如 1 月 1 日零点结算的日线收益属于前一年 12 月。
 
-- [x] 初始化 Python 项目与依赖锁定。
-- [x] 下载 9 个交易对的小时线与日线历史数据。
-- [x] 实现基础价格加载与时间索引对齐。
-- [ ] 统一路径与配置入口。
-- [ ] 完善缺失数据策略、权重协议和调仓逻辑。
-- [ ] 完成交易成本、现金与持仓记账、净值曲线和绩效汇总。
-- [ ] 增加关键回测场景验证与基准策略。
-- [ ] 建立实验配置与产物归档规范。
-- [ ] 实现 Agent Harness 的任务循环、工具接口和运行记录。
-- [ ] 接入自动评估与研究报告生成。
+基准比较需传入已覆盖相同净值时点的序列：
+
+```python
+report = evaluate_backtest(
+    result,
+    benchmarks={"BTC": btc_result["equity"], "equal_weight": eq_result["equity"]},
+)
+print(report["comparison"])
+```
+
+## 数据
+
+当前研究池：BTCUSDT、ETHUSDT、BNBUSDT、SOLUSDT、XRPUSDT、DOGEUSDT、ADAUSDT、TRXUSDT、LINKUSDT。仓库包含各自的 1h 和 1d CSV，共 18 个文件。时间为 UTC，文件名为 `{SYMBOL}_{INTERVAL}.csv`。
+
+重新下载前检查 `download_binance.py` 中的交易对、起止日期和输出目录：
+
+```bash
+uv run download_binance.py
+```
+
+使用 Binance 公共行情接口，不需要交易 API key；同名数据文件会被覆盖。当前研究池为固定币种列表，尚未实现历史时点的成分重建。
+
+## 验证
+
+```bash
+uv run python -m unittest discover -s tests -v
+```
+
+现有 8 项测试覆盖绩效指标和与多空回测的连接，尚未完整覆盖生成策略、Agent 调用失败、未来数据检查或全部交易记账场景。
+
+## 接下来
+
+- 将实际数据能力和回测配置传入规划、代码生成 Agent。
+- 检查 CLI 失败、代码语法、权重约束、全零权重和未来数据使用。
+- 统一配置、路径与运行入口，连接生成、验证、回测和评估。
+- 增加交易记账测试、基准组合和样本外验证。
+- 按实验保存 thesis、方案、代码版本、数据版本、参数与结果。
+- 在以上基础上建立自动研究循环。

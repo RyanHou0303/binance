@@ -18,3 +18,6 @@ wheels/
 
 # macOS metadata
 .DS_Store
+
+# Backtest charts
+outputs/

@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "properties": {
+    "hypothesis_and_rationale": {"type": "string"},
+    "factor_formula": {"type": "string"},
+    "portfolio_weighting_rules": {"type": "string"},
+    "validation_plan": {"type": "string"}
+  },
+  "required": [
+    "hypothesis_and_rationale",
+    "factor_formula",
+    "portfolio_weighting_rules",
+    "validation_plan"
+  ],
+  "additionalProperties": false
+}
